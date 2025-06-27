@@ -20,12 +20,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Verifica se há sessão ativa inicialmente
     supabase.auth.getSession().then(({ data }) => {
       setUser(data.session?.user ?? null);
       setLoading(false);
     });
 
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+    // Ouvinte para mudanças de autenticação (ex: login via OAuth)
+    const { data: listener } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (session?.access_token) {
+        await supabase.auth.setSession({
+          access_token: session.access_token,
+          refresh_token: session.refresh_token,
+        });
+      }
       setUser(session?.user ?? null);
       setLoading(false);
     });
@@ -43,6 +51,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signOut = async () => {
     await supabase.auth.signOut();
+    setUser(null); // Limpa o estado do usuário local também
   };
 
   return (
