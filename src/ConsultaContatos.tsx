@@ -99,7 +99,7 @@ export function ConsultaContatos() {
         <Link to="/" style={voltarStyle}>← Voltar para Home</Link>
 
         <div style={containerStyle}>
-          <h2 style={titleStyle}>Consulta de Contatos</h2>
+          <h2 style={titleStyle}>Consulta de Cadastro</h2>
 
           <button onClick={fetchContatos} style={buttonStyle} disabled={loading}>
             {loading ? 'Carregando...' : 'Atualizar Lista'}
