@@ -13,84 +13,46 @@ interface Contato {
   created_at: string;
 }
 
-// Estilos extras para paginação
-const navButtonStyle: React.CSSProperties = {
-  backgroundColor: '#0096FA',
-  color: '#FFFFFF',
-  border: 'none',
-  borderRadius: 6,
-  padding: '6px 12px',
-  cursor: 'pointer',
-  fontSize: 14,
-};
-
-const paginacaoStyle: React.CSSProperties = {
-  display: 'flex',
-  justifyContent: 'space-between',
-  alignItems: 'center',
-  marginTop: 20,
-  color: '#FFFFFF',
-};
-
 export function ConsultaContatos() {
   const [contatos, setContatos] = useState<Contato[]>([]);
-  const [filtered, setFiltered] = useState<Contato[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const limit = 20;
 
-  // Pesquisa
-  const [searchNome, setSearchNome] = useState('');
-  const [searchEmail, setSearchEmail] = useState('');
-  const [searchCelular, setSearchCelular] = useState('');
-
-  // Paginação
-  const [currentPage, setCurrentPage] = useState(1);
-  const pageSize = 20;
-  const totalPages = Math.ceil(filtered.length / pageSize);
-  const paginatedContatos = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
-
-  const fetchContatos = async () => {
+  async function fetchContatos(page: number) {
     setLoading(true);
     setError(null);
+
+    const from = (page - 1) * limit;
+    const to = from + limit - 1;
 
     const { data, error } = await supabase
       .from('Contatos')
       .select('*')
-      .order('nome_completo', { ascending: true });
+      .order('nome_completo', { ascending: true })
+      .range(from, to);
 
     if (error) {
       setError(error.message);
       setContatos([]);
-      setFiltered([]);
     } else if (data) {
       setContatos(data);
-      setFiltered(data);
     }
-
-    setCurrentPage(1);
     setLoading(false);
+  }
+
+  useEffect(() => {
+    fetchContatos(page);
+  }, [page]);
+
+  const handlePrevPage = () => {
+    if (page > 1) setPage(page - 1);
   };
 
-  useEffect(() => {
-    fetchContatos();
-  }, []);
-
-  useEffect(() => {
-    const filtro = contatos.filter((c) => {
-      const nome = c.nome_completo?.toLowerCase() || '';
-      const email = c.email?.toLowerCase() || '';
-      const celular = c.celular || '';
-
-      return (
-        nome.includes(searchNome.toLowerCase()) &&
-        email.includes(searchEmail.toLowerCase()) &&
-        celular.includes(searchCelular)
-      );
-    });
-
-    setFiltered(filtro);
-    setCurrentPage(1);
-  }, [searchNome, searchEmail, searchCelular, contatos]);
+  const handleNextPage = () => {
+    if (contatos.length === limit) setPage(page + 1);
+  };
 
   return (
     <div
@@ -111,39 +73,15 @@ export function ConsultaContatos() {
         <div style={containerStyle}>
           <h2 style={titleStyle}>Consulta de Contatos</h2>
 
-          <button onClick={fetchContatos} style={buttonStyle} disabled={loading}>
+          <button onClick={() => fetchContatos(page)} style={buttonStyle} disabled={loading}>
             {loading ? 'Carregando...' : 'Atualizar Lista'}
           </button>
 
-          <div style={{ display: 'flex', gap: 16, marginBottom: 20 }}>
-            <input
-              type="text"
-              placeholder="Pesquisar Nome"
-              value={searchNome}
-              onChange={(e) => setSearchNome(e.target.value)}
-              style={inputStyle}
-            />
-            <input
-              type="text"
-              placeholder="Pesquisar Email"
-              value={searchEmail}
-              onChange={(e) => setSearchEmail(e.target.value)}
-              style={inputStyle}
-            />
-            <input
-              type="text"
-              placeholder="Pesquisar Celular"
-              value={searchCelular}
-              onChange={(e) => setSearchCelular(e.target.value)}
-              style={inputStyle}
-            />
-          </div>
-
           {error && <p style={errorStyle}>Erro: {error}</p>}
 
-          {!loading && paginatedContatos.length === 0 && <p>Nenhum contato encontrado.</p>}
+          {!loading && contatos.length === 0 && <p>Nenhum contato encontrado.</p>}
 
-          {paginatedContatos.length > 0 && (
+          {contatos.length > 0 && (
             <>
               <table style={tableStyle}>
                 <thead>
@@ -157,7 +95,7 @@ export function ConsultaContatos() {
                   </tr>
                 </thead>
                 <tbody>
-                  {paginatedContatos.map((contato, index) => (
+                  {contatos.map((contato, index) => (
                     <tr key={contato.id} style={index % 2 === 0 ? evenRowStyle : undefined}>
                       <td style={tdStyle}>{contato.nome_completo || '-'}</td>
                       <td style={tdStyle}>{contato.celular || '-'}</td>
@@ -187,23 +125,23 @@ export function ConsultaContatos() {
                 </tbody>
               </table>
 
-              <div style={paginacaoStyle}>
+              <div style={paginationContainerStyle}>
                 <button
                   style={navButtonStyle}
-                  disabled={currentPage === 1}
-                  onClick={() => setCurrentPage((p) => p - 1)}
+                  onClick={handlePrevPage}
+                  disabled={page === 1 || loading}
                 >
-                  ← Anterior
+                  Anterior
                 </button>
-                <span>
-                  Página {currentPage} de {totalPages}
-                </span>
+
+                <span style={pageNumberStyle}>Página {page}</span>
+
                 <button
                   style={navButtonStyle}
-                  disabled={currentPage === totalPages}
-                  onClick={() => setCurrentPage((p) => p + 1)}
+                  onClick={handleNextPage}
+                  disabled={contatos.length < limit || loading}
                 >
-                  Próxima →
+                  Próxima
                 </button>
               </div>
             </>
@@ -214,7 +152,6 @@ export function ConsultaContatos() {
   );
 }
 
-// Estilos reutilizáveis
 const voltarStyle: React.CSSProperties = {
   display: 'inline-block',
   marginBottom: 20,
@@ -255,15 +192,6 @@ const buttonStyle: React.CSSProperties = {
   marginBottom: 20,
 };
 
-const inputStyle: React.CSSProperties = {
-  padding: 8,
-  borderRadius: 8,
-  border: '1px solid #BCBEC0',
-  fontSize: 14,
-  width: '100%',
-  maxWidth: 200,
-};
-
 const errorStyle: React.CSSProperties = {
   color: '#F5D010',
   marginBottom: 12,
@@ -293,4 +221,29 @@ const tdStyle: React.CSSProperties = {
 
 const evenRowStyle: React.CSSProperties = {
   backgroundColor: 'rgba(255, 255, 255, 0.1)',
+};
+
+const paginationContainerStyle: React.CSSProperties = {
+  marginTop: 16,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: 12,
+};
+
+const navButtonStyle: React.CSSProperties = {
+  backgroundColor: '#0096FA',
+  border: 'none',
+  padding: '8px 14px',
+  color: '#FFFFFF',
+  borderRadius: 8,
+  cursor: 'pointer',
+  fontWeight: '600',
+  fontSize: 14,
+};
+
+const pageNumberStyle: React.CSSProperties = {
+  fontWeight: 700,
+  fontSize: 16,
+  color: '#FFFFFF',
 };
