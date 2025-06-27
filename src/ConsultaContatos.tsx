@@ -33,7 +33,6 @@ const paginacaoStyle: React.CSSProperties = {
 
 export function ConsultaContatos() {
   const [contatos, setContatos] = useState<Contato[]>([]);
-  const [filtered, setFiltered] = useState<Contato[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -44,77 +43,139 @@ export function ConsultaContatos() {
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 20;
 
-  const totalPages = Math.ceil(filtered.length / pageSize);
-  const paginatedContatos = filtered.slice(
-    (currentPage - 1) * pageSize,
-    currentPage * pageSize
-  );
+  const [totalCount, setTotalCount] = useState(0);
+  const totalPages = Math.ceil(totalCount / pageSize);
 
-  const fetchContatos = async () => {
+  // Função para buscar contatos com paginação e filtro no backend
+  const fetchContatos = async (page: number = 1) => {
     setLoading(true);
     setError(null);
 
-    const { data, error } = await supabase
+    const from = (page - 1) * pageSize;
+    const to = page * pageSize - 1;
+
+    // Construir filtros no backend
+    let query = supabase
       .from('Contatos')
-      .select('*')
-      .order('nome_completo', { ascending: true });
+      .select('*', { count: 'exact' })
+      .order('nome_completo', { ascending: true })
+      .range(from, to);
+
+    // Aplicar filtros se houver texto
+    if (searchNome.trim() !== '') {
+      query = query.ilike('nome_completo', `%${searchNome.trim()}%`);
+    }
+    if (searchEmail.trim() !== '') {
+      query = query.ilike('email', `%${searchEmail.trim()}%`);
+    }
+    if (searchCelular.trim() !== '') {
+      query = query.ilike('celular', `%${searchCelular.trim()}%`);
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       setError(error.message);
       setContatos([]);
-      setFiltered([]);
+      setTotalCount(0);
     } else {
       setContatos(data || []);
-      setFiltered(data || []);
+      // O count vem no data? Na API do supabase, ele vem separado, mas pode ser necessário
+      // para isso, precisa habilitar a opção 'count: exact' no select, já feita.
+      // Mas data não traz count, precisa pegar do meta (não retornado diretamente).
+      // Para simplificar, vou buscar count separado abaixo.
     }
 
-    setCurrentPage(1);
     setLoading(false);
   };
 
+  // Função para buscar o total de registros com filtros aplicados
+  const fetchTotalCount = async () => {
+    let countQuery = supabase
+      .from('Contatos')
+      .select('id', { count: 'exact', head: true });
+
+    if (searchNome.trim() !== '') {
+      countQuery = countQuery.ilike('nome_completo', `%${searchNome.trim()}%`);
+    }
+    if (searchEmail.trim() !== '') {
+      countQuery = countQuery.ilike('email', `%${searchEmail.trim()}%`);
+    }
+    if (searchCelular.trim() !== '') {
+      countQuery = countQuery.ilike('celular', `%${searchCelular.trim()}%`);
+    }
+
+    const { count, error } = await countQuery;
+
+    if (error) {
+      setError(error.message);
+      setTotalCount(0);
+    } else {
+      setTotalCount(count || 0);
+    }
+  };
+
+  // Atualiza a lista e o total toda vez que a página ou filtros mudam
   useEffect(() => {
-    fetchContatos();
-  }, []);
+    fetchTotalCount();
+    fetchContatos(currentPage);
+  }, [currentPage, searchNome, searchEmail, searchCelular]);
 
+  // Quando os filtros mudam, volta para a página 1
   useEffect(() => {
-    const filtro = contatos.filter((c) => {
-      const nome = c.nome_completo?.toLowerCase() || '';
-      const email = c.email?.toLowerCase() || '';
-      const celular = c.celular || '';
-
-      return (
-        nome.includes(searchNome.toLowerCase()) &&
-        email.includes(searchEmail.toLowerCase()) &&
-        celular.includes(searchCelular)
-      );
-    });
-
-    setFiltered(filtro);
     setCurrentPage(1);
-  }, [searchNome, searchEmail, searchCelular, contatos]);
+  }, [searchNome, searchEmail, searchCelular]);
 
   return (
-    <div style={{ minHeight: '100vh', backgroundColor: '#1C407D', padding: 20, color: '#FFF', fontFamily: 'Poppins, sans-serif' }}>
+    <div
+      style={{
+        minHeight: '100vh',
+        backgroundColor: '#1C407D',
+        padding: 20,
+        color: '#FFF',
+        fontFamily: 'Poppins, sans-serif',
+      }}
+    >
       <div style={{ maxWidth: 900, margin: '40px auto', padding: '0 24px' }}>
-        <Link to="/" style={voltarStyle}>← Voltar para Home</Link>
+        <Link to="/" style={voltarStyle}>
+          ← Voltar para Home
+        </Link>
 
         <div style={containerStyle}>
           <h2 style={titleStyle}>Consulta de Cadastro de Associados e Membros</h2>
 
-          <button onClick={fetchContatos} style={buttonStyle} disabled={loading}>
+          <button onClick={() => fetchContatos(currentPage)} style={buttonStyle} disabled={loading}>
             {loading ? 'Carregando...' : 'Atualizar Lista'}
           </button>
 
           <div style={{ display: 'flex', gap: 16, marginBottom: 20 }}>
-            <input type="text" placeholder="Pesquisar Nome" value={searchNome} onChange={(e) => setSearchNome(e.target.value)} style={inputStyle} />
-            <input type="text" placeholder="Pesquisar Email" value={searchEmail} onChange={(e) => setSearchEmail(e.target.value)} style={inputStyle} />
-            <input type="text" placeholder="Pesquisar Celular" value={searchCelular} onChange={(e) => setSearchCelular(e.target.value)} style={inputStyle} />
+            <input
+              type="text"
+              placeholder="Pesquisar Nome"
+              value={searchNome}
+              onChange={(e) => setSearchNome(e.target.value)}
+              style={inputStyle}
+            />
+            <input
+              type="text"
+              placeholder="Pesquisar Email"
+              value={searchEmail}
+              onChange={(e) => setSearchEmail(e.target.value)}
+              style={inputStyle}
+            />
+            <input
+              type="text"
+              placeholder="Pesquisar Celular"
+              value={searchCelular}
+              onChange={(e) => setSearchCelular(e.target.value)}
+              style={inputStyle}
+            />
           </div>
 
           {error && <p style={errorStyle}>Erro: {error}</p>}
-          {!loading && paginatedContatos.length === 0 && <p>Nenhum contato encontrado.</p>}
+          {!loading && contatos.length === 0 && <p>Nenhum contato encontrado.</p>}
 
-          {paginatedContatos.length > 0 && (
+          {contatos.length > 0 && (
             <>
               <table style={tableStyle}>
                 <thead>
@@ -128,7 +189,7 @@ export function ConsultaContatos() {
                   </tr>
                 </thead>
                 <tbody>
-                  {paginatedContatos.map((contato, index) => (
+                  {contatos.map((contato, index) => (
                     <tr key={contato.id} style={index % 2 === 0 ? evenRowStyle : undefined}>
                       <td style={tdStyle}>{contato.nome_completo || '-'}</td>
                       <td style={tdStyle}>{contato.celular || '-'}</td>
@@ -139,20 +200,26 @@ export function ConsultaContatos() {
                           <a href={contato.linkedin} target="_blank" rel="noopener noreferrer" style={{ color: '#0096FA' }}>
                             Perfil
                           </a>
-                        ) : '-'}
+                        ) : (
+                          '-'
+                        )}
                       </td>
-                      <td style={tdStyle}>
-                        {contato.cadastro_at ? new Date(contato.cadastro_at).toLocaleDateString() : '-'}
-                      </td>
+                      <td style={tdStyle}>{contato.cadastro_at ? new Date(contato.cadastro_at).toLocaleDateString() : '-'}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
 
               <div style={paginacaoStyle}>
-                <button style={navButtonStyle} disabled={currentPage === 1} onClick={() => setCurrentPage((p) => p - 1)}>← Anterior</button>
-                <span>Página {currentPage} de {totalPages}</span>
-                <button style={navButtonStyle} disabled={currentPage === totalPages} onClick={() => setCurrentPage((p) => p + 1)}>Próxima →</button>
+                <button style={navButtonStyle} disabled={currentPage === 1} onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}>
+                  ← Anterior
+                </button>
+                <span>
+                  Página {currentPage} de {totalPages}
+                </span>
+                <button style={navButtonStyle} disabled={currentPage === totalPages || totalPages === 0} onClick={() => setCurrentPage((p) => Math.min(p + 1, totalPages))}>
+                  Próxima →
+                </button>
               </div>
             </>
           )}
